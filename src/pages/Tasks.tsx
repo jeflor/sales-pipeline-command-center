@@ -11,15 +11,16 @@ import {
   Filter,
 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
-import { tasks } from "../data/activities";
 import type { Task } from "../data/types";
-import { leadsById } from "../data/leads";
 import { repsById } from "../data/reps";
 import { Avatar } from "../components/ui/Avatar";
 import { Badge } from "../components/ui/Badge";
 import { Card } from "../components/ui/Card";
 import { fmtDate, fmtMoney, relativeTime } from "../lib/format";
 import { useAppState } from "../state/AppState";
+import { useStore } from "../state/DataStore";
+import { useToast } from "../state/Toaster";
+import { Sparkles, Send } from "lucide-react";
 
 const kindIcon: Record<
   Task["kind"],
@@ -35,7 +36,13 @@ const kindIcon: Record<
 type Tab = "today" | "overdue" | "upcoming" | "completed";
 
 export function TasksPage() {
-  const { role, currentUserId, openLead } = useAppState();
+  const { role, currentUserId, openLead, openAI } = useAppState();
+  const store = useStore();
+  const toast = useToast();
+  const leadsById = useMemo(
+    () => Object.fromEntries(store.leads.map((l) => [l.id, l])),
+    [store.leads],
+  );
   const [tab, setTab] = useState<Tab>("today");
   const [query, setQuery] = useState("");
 
@@ -43,10 +50,10 @@ export function TasksPage() {
 
   const ownTasks = useMemo(
     () =>
-      tasks.filter((t) =>
+      store.tasks.filter((t) =>
         role === "rep" ? t.ownerId === currentUserId : true,
       ),
-    [role, currentUserId],
+    [store.tasks, role, currentUserId],
   );
 
   const counts = {
@@ -169,9 +176,23 @@ export function TasksPage() {
                   <input
                     type="checkbox"
                     checked={t.done}
-                    readOnly
-                    className="mt-1.5 h-4 w-4 rounded border-ink-300 text-brand-600 cursor-pointer"
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      if (t.done) {
+                        store.uncompleteTask({
+                          taskId: t.id,
+                          actorId: currentUserId,
+                        });
+                      } else {
+                        store.completeTask({
+                          taskId: t.id,
+                          actorId: currentUserId,
+                        });
+                        toast.success(`Done: ${t.title}`);
+                      }
+                    }}
                     onClick={(e) => e.stopPropagation()}
+                    className="mt-1.5 h-4 w-4 rounded border-ink-300 text-brand-600 cursor-pointer"
                   />
                   <span
                     className={`mt-1 h-7 w-7 rounded-md flex items-center justify-center shrink-0 ${
@@ -198,6 +219,12 @@ export function TasksPage() {
                       {t.priority === "high" && (
                         <Badge tone="warning">High priority</Badge>
                       )}
+                      {t.draftReady && (
+                        <span className="badge-brand">
+                          <Sparkles className="h-3 w-3" />
+                          AI draft ready
+                        </span>
+                      )}
                     </div>
                     <div className="mt-0.5 flex items-center gap-2 text-[11.5px] text-ink-500 flex-wrap">
                       {lead && (
@@ -219,12 +246,48 @@ export function TasksPage() {
                       </span>
                     </div>
                   </div>
-                  {role === "manager" && (
-                    <div className="flex items-center gap-1.5 text-[11px] text-ink-500 shrink-0">
-                      <Avatar ownerId={owner.id} size="xs" />
-                      {owner.name.split(" ")[0]}
-                    </div>
-                  )}
+                  <div
+                    className="flex items-center gap-1 shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {t.draftReady && lead && !t.done && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          store.logEmail({
+                            leadId: lead.id,
+                            actorId: currentUserId,
+                            subject: `Re: ${lead.company}`,
+                          });
+                          store.completeTask({
+                            taskId: t.id,
+                            actorId: currentUserId,
+                          });
+                          toast.success(`Sent + done · ${lead.company}`);
+                        }}
+                        className="btn-primary text-[11.5px] py-1 px-2 hidden md:inline-flex"
+                      >
+                        <Send className="h-3 w-3" />
+                        Send draft
+                      </button>
+                    )}
+                    {lead && (
+                      <button
+                        type="button"
+                        onClick={() => openAI(lead.id)}
+                        className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-brand-50 text-brand-600"
+                        title="AI assist"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {role === "manager" && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-ink-500 ml-1">
+                        <Avatar ownerId={owner.id} size="xs" />
+                        {owner.name.split(" ")[0]}
+                      </div>
+                    )}
+                  </div>
                 </li>
               );
             })}

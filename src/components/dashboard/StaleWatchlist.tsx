@@ -1,15 +1,18 @@
-import { ArrowRight } from "lucide-react";
 import { Card, CardHeader } from "../ui/Card";
 import { Badge, RiskBadge } from "../ui/Badge";
 import { Avatar } from "../ui/Avatar";
-import { leads } from "../../data/leads";
+import { useStore } from "../../state/DataStore";
 import { fmtMoney } from "../../lib/format";
 import { STAGES } from "../../data/types";
 import { useAppState } from "../../state/AppState";
+import { repsById } from "../../data/reps";
+import { InlineActions } from "../actions/InlineActions";
+import { BlockerPills, UnreadEmailPill } from "../signals/SignalPills";
 
 export function StaleWatchlist() {
   const { role, currentUserId, openLead } = useAppState();
-  const pool = leads.filter(
+  const store = useStore();
+  const pool = store.leads.filter(
     (l) =>
       l.stage !== "closed_won" &&
       l.stage !== "closed_lost" &&
@@ -27,7 +30,7 @@ export function StaleWatchlist() {
         <CardHeader
           eyebrow="Stale deals watchlist"
           title="At-risk deals losing momentum"
-          description="Surfaced when there's been no inbound or outbound activity in 5+ days."
+          description="Surfaced when there's been no inbound or outbound activity in 5+ days. Act inline to revive."
           right={
             <div className="flex items-center gap-2">
               <Badge tone="neutral">{filtered.length} at risk</Badge>
@@ -47,19 +50,24 @@ export function StaleWatchlist() {
               {role === "manager" && <th className="table-head">Owner</th>}
               <th className="table-head text-right">Value</th>
               <th className="table-head text-right">Inactive</th>
-              <th className="table-head">Risk</th>
-              <th className="table-head pr-5">Suggested action</th>
+              <th className="table-head">Risk · blockers</th>
+              <th className="table-head pr-5 text-right">Quick action</th>
             </tr>
           </thead>
           <tbody>
             {sorted.map((l) => (
               <tr
                 key={l.id}
-                className="border-b border-ink-100 last:border-0 hover:bg-ink-50/40 cursor-pointer transition-colors"
+                className="border-b border-ink-100 last:border-0 hover:bg-ink-50/40 cursor-pointer transition-colors group"
                 onClick={() => openLead(l.id)}
               >
                 <td className="table-cell pl-5">
-                  <div className="font-medium text-ink-900">{l.name}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-ink-900">
+                      {l.name}
+                    </span>
+                    <UnreadEmailPill lead={l} />
+                  </div>
                   <div className="text-[11.5px] text-ink-400">
                     {l.company}
                   </div>
@@ -74,9 +82,7 @@ export function StaleWatchlist() {
                     <div className="flex items-center gap-1.5">
                       <Avatar ownerId={l.ownerId} size="xs" />
                       <span className="text-[12px] text-ink-700">
-                        {l.ownerId.replace("rep_", "").replace(/^./, (c) =>
-                          c.toUpperCase(),
-                        )}
+                        {repsById[l.ownerId]?.name.split(" ")[0]}
                       </span>
                     </div>
                   </td>
@@ -98,13 +104,18 @@ export function StaleWatchlist() {
                   </span>
                 </td>
                 <td className="table-cell">
-                  <RiskBadge level={l.riskLevel} />
+                  <div className="flex flex-col gap-1">
+                    <RiskBadge level={l.riskLevel} />
+                    <BlockerPills lead={l} max={1} size="xs" />
+                  </div>
                 </td>
-                <td className="table-cell pr-5">
-                  <span className="inline-flex items-center gap-1 text-[12px] text-ink-700">
-                    <ArrowRight className="h-3 w-3 text-brand-600" />
-                    {l.recommendedAction}
-                  </span>
+                <td
+                  className="table-cell pr-5"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-end opacity-70 group-hover:opacity-100">
+                    <InlineActions lead={l} variant="compact" />
+                  </div>
                 </td>
               </tr>
             ))}

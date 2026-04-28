@@ -13,7 +13,7 @@ import {
   Check,
 } from "lucide-react";
 import { useAppState } from "../../state/AppState";
-import { leads, leadsById } from "../../data/leads";
+import { useStore } from "../../state/DataStore";
 import { Avatar } from "../ui/Avatar";
 import { fmtMoney } from "../../lib/format";
 
@@ -68,7 +68,11 @@ const actionMeta: Record<
   },
 };
 
-function generateOutput(action: Action, leadId: string | null): string {
+function generateOutput(
+  action: Action,
+  leadId: string | null,
+  leadsById: Record<string, ReturnType<typeof useStore>["leads"][number]>,
+): string {
   const lead = leadId ? leadsById[leadId] : null;
   if (!lead) {
     // No-context fallback uses team-wide insight
@@ -179,6 +183,11 @@ function newId() {
 
 export function AIAssistantPanel() {
   const { ai, closeAI } = useAppState();
+  const store = useStore();
+  const leadsById = useMemo(
+    () => Object.fromEntries(store.leads.map((l) => [l.id, l])),
+    [store.leads],
+  );
   const lead = ai.contextLeadId ? leadsById[ai.contextLeadId] : null;
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -225,7 +234,7 @@ export function AIAssistantPanel() {
         {
           id: newId(),
           role: "assistant",
-          body: generateOutput(a, ai.contextLeadId),
+          body: generateOutput(a, ai.contextLeadId, leadsById),
           meta: lead ? `${meta.chip} · ${lead.company}` : meta.chip,
         },
       ]);
@@ -258,13 +267,13 @@ export function AIAssistantPanel() {
 
   const suggestedDeals = useMemo(
     () =>
-      [...leads]
+      [...store.leads]
         .filter(
           (l) => l.stage !== "closed_won" && l.stage !== "closed_lost",
         )
         .sort((a, b) => b.urgencyScore - a.urgencyScore)
         .slice(0, 3),
-    [],
+    [store.leads],
   );
 
   if (!ai.open) return null;

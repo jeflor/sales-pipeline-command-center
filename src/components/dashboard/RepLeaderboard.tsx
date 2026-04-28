@@ -1,10 +1,12 @@
 import { Card, CardHeader } from "../ui/Card";
 import { Avatar } from "../ui/Avatar";
 import { reps } from "../../data/reps";
-import { leads } from "../../data/leads";
+import { useStore } from "../../state/DataStore";
 import { fmtMoney, fmtPct } from "../../lib/format";
 
 export function RepLeaderboard() {
+  const store = useStore();
+  const leads = store.leads;
   const repRows = reps
     .filter((r) => r.role === "rep")
     .map((r) => {

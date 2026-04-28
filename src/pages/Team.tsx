@@ -2,11 +2,13 @@ import { Card, CardHeader } from "../components/ui/Card";
 import { Avatar } from "../components/ui/Avatar";
 import { Badge } from "../components/ui/Badge";
 import { reps } from "../data/reps";
-import { leads } from "../data/leads";
+import { useStore } from "../state/DataStore";
 import { fmtMoney, fmtPct } from "../lib/format";
 import { Mail } from "lucide-react";
 
 export function TeamPage() {
+  const store = useStore();
+  const leads = store.leads;
   const repRows = reps
     .filter((r) => r.role === "rep")
     .map((r) => {

@@ -1,15 +1,7 @@
 import type { Lead, Stage, LeadSource } from "./types";
+import { NOW, daysAgo, daysFromNow, hoursAgo } from "./time";
 
-// Deterministic "now" so the demo feels stable across reloads.
-// Pinned to a recent business date.
-export const NOW = new Date("2026-04-28T15:00:00.000Z");
-
-const daysAgo = (n: number) =>
-  new Date(NOW.getTime() - n * 86400000).toISOString();
-const daysFromNow = (n: number) =>
-  new Date(NOW.getTime() + n * 86400000).toISOString();
-const hoursAgo = (n: number) =>
-  new Date(NOW.getTime() - n * 3600000).toISOString();
+export { NOW, daysAgo, daysFromNow, hoursAgo };
 
 type Seed = {
   id: string;
@@ -594,6 +586,16 @@ const seeds: Seed[] = [
   },
 ];
 
+// We import depth data lazily inside the map below via require-style indirection
+// to avoid circular imports — depth.ts uses helpers from this file.
+import {
+  stakeholdersByLead,
+  blockersByLead,
+  dataIssuesByLead,
+  duplicates,
+  unreadEmailsByLead,
+} from "./depth";
+
 export const leads: Lead[] = seeds.map((s) => {
   const lastTouch = daysAgo(s.lastTouchDaysAgo);
   const nextTouch =
@@ -653,6 +655,11 @@ export const leads: Lead[] = seeds.map((s) => {
     reasonSurfaced: s.reasonSurfaced ?? "Routine review",
     aiSummary:
       s.aiSummary ?? "No AI summary available for this lead at this time.",
+    stakeholders: stakeholdersByLead[s.id] ?? [],
+    blockers: blockersByLead[s.id] ?? [],
+    dataIssues: dataIssuesByLead[s.id] ?? [],
+    unreadEmails: unreadEmailsByLead[s.id] ?? 0,
+    duplicateOf: duplicates[s.id],
   };
 });
 
@@ -670,4 +677,3 @@ export const fmtMoney = (n: number) => {
   return `$${n.toLocaleString()}`;
 };
 
-export { hoursAgo, daysAgo, daysFromNow };

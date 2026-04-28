@@ -1,11 +1,17 @@
-import { ChevronRight, Phone, Mail, Sparkles, AlertTriangle } from "lucide-react";
+import { ChevronRight, Phone, Mail, Sparkles, AlertTriangle, Wand2 } from "lucide-react";
 import { Card, CardHeader } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { Avatar } from "../ui/Avatar";
-import { leads } from "../../data/leads";
+import { useStore } from "../../state/DataStore";
 import { fmtMoney } from "../../lib/format";
 import { useAppState } from "../../state/AppState";
+import { useToast } from "../../state/Toaster";
 import { STAGES } from "../../data/types";
+import { InlineActions } from "../actions/InlineActions";
+import {
+  BlockerPills,
+  UnreadEmailPill,
+} from "../signals/SignalPills";
 
 const stageLabel = (id: string) =>
   STAGES.find((s) => s.id === id)?.label ?? id;
@@ -18,8 +24,10 @@ function actionIcon(action: string) {
 }
 
 export function PriorityQueue() {
-  const { role, currentUserId, openLead, openAI } = useAppState();
-  const pool = leads.filter(
+  const { role, currentUserId, openLead } = useAppState();
+  const store = useStore();
+  const toast = useToast();
+  const pool = store.leads.filter(
     (l) => l.stage !== "closed_won" && l.stage !== "closed_lost",
   );
   const filtered =
@@ -39,7 +47,7 @@ export function PriorityQueue() {
         }
         description={
           role === "rep"
-            ? "Ranked by urgency, deal value, and inactivity. Tackle these first."
+            ? "Ranked by urgency, deal value, and inactivity. Act inline — no need to leave this view."
             : "Highest-leverage interventions across the team's open pipeline."
         }
         right={
@@ -52,12 +60,12 @@ export function PriorityQueue() {
         {ranked.map((l) => {
           const Icon = actionIcon(l.recommendedAction);
           return (
-            <li key={l.id} className="px-1">
-              <button
-                type="button"
-                onClick={() => openLead(l.id)}
-                className="w-full text-left py-3 flex items-start gap-3 hover:bg-ink-50/60 rounded-md px-2 transition-colors group"
-              >
+            <li
+              key={l.id}
+              className="px-1 py-2.5 hover:bg-ink-50/60 rounded-md group cursor-pointer"
+              onClick={() => openLead(l.id)}
+            >
+              <div className="flex items-start gap-3">
                 <div className="flex flex-col items-center pt-1">
                   <span
                     className={`text-[10px] font-bold uppercase tracking-wider px-1.5 rounded ${
@@ -80,41 +88,68 @@ export function PriorityQueue() {
                       · {l.company}
                     </span>
                     <Badge tone="neutral">{stageLabel(l.stage)}</Badge>
+                    <UnreadEmailPill lead={l} />
                   </div>
-                  <div className="mt-0.5 text-[12.5px] text-ink-500 flex items-center gap-1.5">
+                  <div className="mt-1 text-[12.5px] text-ink-500 flex items-center gap-1.5">
                     <Icon className="h-3.5 w-3.5 text-ink-400" />
                     <span className="font-medium text-ink-800">
                       {l.recommendedAction}
                     </span>
                   </div>
-                  <div className="mt-1 text-[11.5px] text-ink-400">
+                  {l.blockers.length > 0 && (
+                    <div className="mt-1.5">
+                      <BlockerPills lead={l} max={2} />
+                    </div>
+                  )}
+                  <div className="mt-1 text-[11px] text-ink-400">
                     {l.reasonSurfaced}
                   </div>
                 </div>
-                <div className="text-right shrink-0">
+                <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
                   <div className="text-[13px] font-semibold text-ink-900">
                     {fmtMoney(l.value)}
                   </div>
-                  <div className="mt-1 flex items-center justify-end gap-2">
-                    {role === "manager" && (
-                      <Avatar ownerId={l.ownerId} size="xs" />
-                    )}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openAI(l.id);
-                      }}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-[11px] inline-flex items-center gap-1 text-brand-700 font-semibold"
-                      title="Open AI assistant for this lead"
-                    >
-                      <Sparkles className="h-3 w-3" />
-                      AI
-                    </button>
-                    <ChevronRight className="h-4 w-4 text-ink-400 group-hover:text-ink-600" />
-                  </div>
+                  {role === "manager" && (
+                    <Avatar ownerId={l.ownerId} size="xs" />
+                  )}
+                  <ChevronRight className="h-4 w-4 text-ink-300 mt-1" />
                 </div>
-              </button>
+              </div>
+
+              {/* Inline action row — appears below content, hover-prominent */}
+              <div className="mt-2 ml-7 flex items-center justify-between">
+                <div className="opacity-70 group-hover:opacity-100 transition-opacity">
+                  <InlineActions lead={l} variant="compact" />
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // 1-click: log a quick "Followed up" + advance touch — fastest action
+                    store.logEmail({
+                      leadId: l.id,
+                      actorId: currentUserId,
+                      subject: `Following up · ${l.company}`,
+                    });
+                    store.scheduleNextTouch({
+                      leadId: l.id,
+                      actorId: currentUserId,
+                      inDays: 2,
+                    });
+                    toast.success(
+                      `Logged touch + scheduled +2d · ${l.company}`,
+                      {
+                        label: "Open",
+                        onClick: () => openLead(l.id),
+                      },
+                    );
+                  }}
+                  className="text-[11px] font-semibold text-brand-700 inline-flex items-center gap-1 hover:underline"
+                >
+                  <Wand2 className="h-3 w-3" />
+                  Do recommended action
+                </button>
+              </div>
             </li>
           );
         })}

@@ -1,5 +1,5 @@
 import type { Activity, Task } from "./types";
-import { hoursAgo, daysAgo, daysFromNow } from "./leads";
+import { hoursAgo, daysAgo, daysFromNow } from "./time";
 
 export const activities: Activity[] = [
   {
@@ -165,6 +165,7 @@ export const tasks: Task[] = [
     done: false,
     priority: "high",
     kind: "email",
+    draftReady: true,
   },
   {
     id: "t-303",
@@ -175,6 +176,7 @@ export const tasks: Task[] = [
     done: false,
     priority: "high",
     kind: "email",
+    draftReady: true,
   },
   {
     id: "t-304",
@@ -215,6 +217,7 @@ export const tasks: Task[] = [
     done: false,
     priority: "normal",
     kind: "email",
+    draftReady: true,
   },
   {
     id: "t-308",

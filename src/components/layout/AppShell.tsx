@@ -3,6 +3,8 @@ import { Sidebar } from "./Sidebar";
 import { TopNav } from "./TopNav";
 import { LeadDrawer } from "../lead/LeadDrawer";
 import { AIAssistantPanel } from "../ai/AIAssistantPanel";
+import { QuickLogModal } from "../quicklog/QuickLogModal";
+import { FloatingActionButton } from "../quicklog/FloatingActionButton";
 
 export function AppShell() {
   return (
@@ -18,6 +20,8 @@ export function AppShell() {
       </div>
       <LeadDrawer />
       <AIAssistantPanel />
+      <QuickLogModal />
+      <FloatingActionButton />
     </div>
   );
 }

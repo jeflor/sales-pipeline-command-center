@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -13,6 +14,12 @@ export type Role = "rep" | "manager";
 type AIAssistantState = {
   open: boolean;
   contextLeadId: string | null;
+};
+
+type QuickLogState = {
+  open: boolean;
+  leadId?: string | null;
+  initialMode?: "call" | "email" | "note" | "task";
 };
 
 type AppStateValue = {
@@ -28,6 +35,13 @@ type AppStateValue = {
   ai: AIAssistantState;
   openAI: (leadId?: string | null) => void;
   closeAI: () => void;
+  // Quick log modal
+  quickLog: QuickLogState;
+  openQuickLog: (input?: Partial<QuickLogState>) => void;
+  closeQuickLog: () => void;
+  // Focus mode (rep)
+  focusMode: boolean;
+  toggleFocusMode: () => void;
 };
 
 function getUser(role: Role) {
@@ -45,6 +59,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     open: false,
     contextLeadId: null,
   });
+  const [quickLog, setQuickLog] = useState<QuickLogState>({ open: false });
+  const [focusMode, setFocusMode] = useState(false);
 
   const openLead = useCallback((id: string) => setOpenLeadId(id), []);
   const closeLead = useCallback(() => setOpenLeadId(null), []);
@@ -53,10 +69,35 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setAI({ open: true, contextLeadId: leadId }),
     [],
   );
-  const closeAI = useCallback(
-    () => setAI((s) => ({ ...s, open: false })),
+  const closeAI = useCallback(() => setAI((s) => ({ ...s, open: false })), []);
+
+  const openQuickLog = useCallback<AppStateValue["openQuickLog"]>(
+    (input = {}) =>
+      setQuickLog({
+        open: true,
+        leadId: input.leadId ?? null,
+        initialMode: input.initialMode ?? "note",
+      }),
     [],
   );
+  const closeQuickLog = useCallback(
+    () => setQuickLog({ open: false }),
+    [],
+  );
+
+  const toggleFocusMode = useCallback(() => setFocusMode((v) => !v), []);
+
+  // Global ⌘L / Ctrl-L shortcut for quick log
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        setQuickLog({ open: true, initialMode: "note" });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const currentUserId =
     role === "manager" ? CURRENT_MANAGER_ID : CURRENT_REP_ID;
@@ -73,8 +114,27 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       ai,
       openAI,
       closeAI,
+      quickLog,
+      openQuickLog,
+      closeQuickLog,
+      focusMode,
+      toggleFocusMode,
     }),
-    [role, currentUserId, openLeadId, openLead, closeLead, ai, openAI, closeAI],
+    [
+      role,
+      currentUserId,
+      openLeadId,
+      openLead,
+      closeLead,
+      ai,
+      openAI,
+      closeAI,
+      quickLog,
+      openQuickLog,
+      closeQuickLog,
+      focusMode,
+      toggleFocusMode,
+    ],
   );
 
   return (

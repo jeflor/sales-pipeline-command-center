@@ -1,6 +1,6 @@
 import { Card, CardHeader } from "../ui/Card";
 import { ACTIVE_STAGES, STAGES } from "../../data/types";
-import { leads } from "../../data/leads";
+import { useStore } from "../../state/DataStore";
 import { fmtMoney } from "../../lib/format";
 
 const stageColor: Record<string, string> = {
@@ -12,11 +12,12 @@ const stageColor: Record<string, string> = {
 };
 
 export function PipelineFunnel() {
+  const store = useStore();
   // Always include closed_won at the tail for context
   const stages = [...ACTIVE_STAGES, "closed_won" as const];
 
   const counts = stages.map((id) => {
-    const items = leads.filter((l) => l.stage === id);
+    const items = store.leads.filter((l) => l.stage === id);
     return {
       id,
       label: STAGES.find((s) => s.id === id)?.label ?? id,

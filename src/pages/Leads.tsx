@@ -4,11 +4,10 @@ import {
   Filter,
   Plus,
   ChevronDown,
-  Sparkles,
   Bookmark,
   Download,
 } from "lucide-react";
-import { leads } from "../data/leads";
+import { useStore } from "../state/DataStore";
 import { STAGES } from "../data/types";
 import type { Stage } from "../data/types";
 import { Avatar } from "../components/ui/Avatar";
@@ -17,6 +16,13 @@ import { Card } from "../components/ui/Card";
 import { fmtDate, fmtMoneyFull, relativeTime } from "../lib/format";
 import { useAppState } from "../state/AppState";
 import { repsById } from "../data/reps";
+import { InlineActions } from "../components/actions/InlineActions";
+import {
+  BlockerPills,
+  UnreadEmailPill,
+  DataIssuePills,
+  DuplicatePill,
+} from "../components/signals/SignalPills";
 
 const savedViews = [
   { id: "all", label: "All deals", count: 22 },
@@ -28,12 +34,13 @@ const savedViews = [
 
 export function LeadsPage() {
   const { role, currentUserId, openLead } = useAppState();
+  const store = useStore();
   const [view, setView] = useState("mine");
   const [query, setQuery] = useState("");
   const [stageFilter, setStageFilter] = useState<Stage | "all">("all");
 
   const filtered = useMemo(() => {
-    return leads
+    return store.leads
       .filter((l) => {
         if (view === "mine" && l.ownerId !== currentUserId) return false;
         if (view === "atrisk" && l.riskLevel !== "high" && l.riskLevel !== "critical")
@@ -51,7 +58,7 @@ export function LeadsPage() {
         return true;
       })
       .sort((a, b) => b.value - a.value);
-  }, [view, query, stageFilter, currentUserId]);
+  }, [store.leads, view, query, stageFilter, currentUserId]);
 
   return (
     <div className="space-y-5">
@@ -146,9 +153,10 @@ export function LeadsPage() {
                 <th className="table-head">Owner</th>
                 <th className="table-head">Source</th>
                 <th className="table-head">Risk</th>
+                <th className="table-head">Signals</th>
                 <th className="table-head">Last touch</th>
                 <th className="table-head">Close date</th>
-                <th className="table-head pr-4 text-right">Action</th>
+                <th className="table-head pr-4 text-right">Quick actions</th>
               </tr>
             </thead>
             <tbody>
@@ -159,7 +167,13 @@ export function LeadsPage() {
                   onClick={() => openLead(l.id)}
                 >
                   <td className="table-cell pl-4">
-                    <div className="font-medium text-ink-900">{l.name}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-ink-900">
+                        {l.name}
+                      </span>
+                      <UnreadEmailPill lead={l} />
+                      <DuplicatePill lead={l} />
+                    </div>
                     <div className="text-[11.5px] text-ink-400">
                       {l.company} · {l.industry}
                     </div>
@@ -186,24 +200,26 @@ export function LeadsPage() {
                   <td className="table-cell">
                     <RiskBadge level={l.riskLevel} />
                   </td>
+                  <td className="table-cell">
+                    <div className="flex flex-col gap-1">
+                      <BlockerPills lead={l} max={1} size="xs" />
+                      <DataIssuePills lead={l} max={1} />
+                      {l.blockers.length === 0 && l.dataIssues.length === 0 && (
+                        <span className="text-[11px] text-ink-400">—</span>
+                      )}
+                    </div>
+                  </td>
                   <td className="table-cell text-[12px] text-ink-600">
                     {relativeTime(l.lastTouchAt)}
                   </td>
                   <td className="table-cell text-[12px] text-ink-600">
                     {fmtDate(l.closeDate)}
                   </td>
-                  <td className="table-cell pr-4 text-right">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openLead(l.id);
-                      }}
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 hover:underline"
-                    >
-                      <Sparkles className="h-3 w-3" />
-                      Act
-                    </button>
+                  <td
+                    className="table-cell pr-4 text-right"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <InlineActions lead={l} variant="compact" />
                   </td>
                 </tr>
               ))}
@@ -218,7 +234,7 @@ export function LeadsPage() {
 
         <div className="px-4 py-2.5 border-t border-ink-200 text-[11.5px] text-ink-500 flex items-center justify-between">
           <span>
-            Showing <span className="font-semibold text-ink-700">{filtered.length}</span> of {leads.length} leads
+            Showing <span className="font-semibold text-ink-700">{filtered.length}</span> of {store.leads.length} leads
           </span>
           <span>
             Total value:{" "}

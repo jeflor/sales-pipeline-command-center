@@ -14,8 +14,7 @@ import {
 import type { ComponentType, SVGProps } from "react";
 import { Card } from "../components/ui/Card";
 import { Avatar } from "../components/ui/Avatar";
-import { activities } from "../data/activities";
-import { leadsById } from "../data/leads";
+import { useStore } from "../state/DataStore";
 import { repsById } from "../data/reps";
 import { fmtTime, fmtDate, relativeTime } from "../lib/format";
 import type { ActivityType } from "../data/types";
@@ -53,6 +52,16 @@ const iconFor: Record<
     tone: "bg-brand-50 text-brand-700",
     label: "Proposal sent",
   },
+  blocker_set: {
+    Icon: StickyNote,
+    tone: "bg-warning-50 text-warning-700",
+    label: "Blocker set",
+  },
+  escalation: {
+    Icon: ArrowRightLeft,
+    tone: "bg-danger-50 text-danger-700",
+    label: "Escalation",
+  },
 };
 
 const filters: Array<{ id: "all" | ActivityType; label: string }> = [
@@ -83,10 +92,12 @@ function sameDay(a: Date, b: Date) {
 
 export function ActivityPage() {
   const { role, currentUserId, openLead } = useAppState();
+  const store = useStore();
+  const leadsById = Object.fromEntries(store.leads.map((l) => [l.id, l]));
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | ActivityType>("all");
 
-  const filtered = activities
+  const filtered = store.activities
     .filter((a) =>
       role === "rep" ? a.ownerId === currentUserId : true,
     )

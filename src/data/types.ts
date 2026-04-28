@@ -56,14 +56,16 @@ export type ActivityType =
   | "note"
   | "stage_change"
   | "task_completed"
-  | "proposal_sent";
+  | "proposal_sent"
+  | "blocker_set"
+  | "escalation";
 
 export type Activity = {
   id: string;
   leadId: string;
   type: ActivityType;
   ownerId: string;
-  at: string; // ISO timestamp
+  at: string;
   summary: string;
   detail?: string;
 };
@@ -73,10 +75,91 @@ export type Task = {
   leadId: string;
   ownerId: string;
   title: string;
-  due: string; // ISO date
+  due: string;
   done: boolean;
   priority: "low" | "normal" | "high";
   kind: "call" | "email" | "meeting" | "follow_up" | "review";
+  draftReady?: boolean; // AI-drafted reply waiting to send
+};
+
+export type StakeholderRole =
+  | "Champion"
+  | "Economic Buyer"
+  | "Technical Buyer"
+  | "End User"
+  | "Procurement"
+  | "Legal"
+  | "Skeptic";
+
+export type StakeholderStatus = "engaged" | "warm" | "cold" | "blocking" | "unknown";
+
+export type Stakeholder = {
+  id: string;
+  name: string;
+  title: string;
+  role: StakeholderRole;
+  status: StakeholderStatus;
+  lastContactAt?: string;
+};
+
+export type BlockerKind =
+  | "legal_review"
+  | "champion_dark"
+  | "procurement_freeze"
+  | "missing_decision_maker"
+  | "security_review"
+  | "budget_freeze"
+  | "competitive"
+  | "no_response";
+
+export type Blocker = {
+  id: string;
+  kind: BlockerKind;
+  label: string;
+  since: string;
+  setBy: string;
+  detail?: string;
+};
+
+export type DataIssue =
+  | "no_decision_maker"
+  | "no_champion"
+  | "missing_close_date"
+  | "stale_contact"
+  | "duplicate_suspected"
+  | "missing_industry"
+  | "no_next_touch";
+
+export type EmailMessage = {
+  id: string;
+  leadId: string;
+  direction: "in" | "out";
+  from: string;
+  to: string;
+  subject: string;
+  body: string;
+  at: string;
+  unread?: boolean;
+  attachments?: { name: string; size: string }[];
+};
+
+export type InternalComment = {
+  id: string;
+  leadId: string;
+  authorId: string;
+  body: string;
+  at: string;
+  mentions?: string[];
+};
+
+export type Attachment = {
+  id: string;
+  leadId: string;
+  name: string;
+  size: string;
+  uploadedBy: string;
+  at: string;
+  kind: "proposal" | "deck" | "msa" | "doc" | "spreadsheet";
 };
 
 export type Lead = {
@@ -95,19 +178,25 @@ export type Lead = {
   createdAt: string;
   lastTouchAt: string;
   nextTouchAt?: string;
-  closeDate: string; // expected close
-  closedAt?: string; // when actually closed
+  closeDate: string;
+  closedAt?: string;
   lostReason?: string;
   notes: string;
   tags: string[];
-  confidence: number; // 0-100
-  // derived/cached fields used in UI
+  confidence: number;
   daysInactive: number;
   riskLevel: RiskLevel;
-  urgencyScore: number; // 0-100
+  urgencyScore: number;
   recommendedAction: string;
   reasonSurfaced: string;
   aiSummary: string;
+  // Operational depth
+  stakeholders: Stakeholder[];
+  blockers: Blocker[];
+  dataIssues: DataIssue[];
+  unreadEmails: number;
+  duplicateOf?: string; // ID of suspected duplicate lead
+  starred?: boolean;
 };
 
 export type LostReason =
@@ -118,3 +207,13 @@ export type LostReason =
   | "Wrong Fit"
   | "No Budget"
   | "Unresponsive";
+
+// Action audit for the audit-trail UI
+export type AuditEvent = {
+  id: string;
+  at: string;
+  actor: string;
+  action: string;
+  leadId?: string;
+  detail?: string;
+};

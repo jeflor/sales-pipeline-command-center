@@ -10,10 +10,17 @@ import {
 } from "lucide-react";
 import { KANBAN_STAGES, STAGES } from "../data/types";
 import type { Stage, Lead } from "../data/types";
-import { leads } from "../data/leads";
+import { useStore } from "../state/DataStore";
 import { fmtMoney, relativeTime } from "../lib/format";
 import { Avatar } from "../components/ui/Avatar";
 import { useAppState } from "../state/AppState";
+import { InlineActions } from "../components/actions/InlineActions";
+import {
+  BlockerPills,
+  UnreadEmailPill,
+  DataIssuePills,
+  DuplicatePill,
+} from "../components/signals/SignalPills";
 
 const stageAccent: Record<Stage, string> = {
   new_lead: "bg-ink-300",
@@ -27,12 +34,13 @@ const stageAccent: Record<Stage, string> = {
 
 export function PipelinePage() {
   const { role, currentUserId, openLead } = useAppState();
+  const store = useStore();
   const [ownerFilter, setOwnerFilter] = useState<"mine" | "all">(
     role === "rep" ? "mine" : "all",
   );
   const [query, setQuery] = useState("");
 
-  const visible = leads.filter((l) => {
+  const visible = store.leads.filter((l) => {
     if (ownerFilter === "mine" && l.ownerId !== currentUserId) return false;
     if (
       query &&
@@ -161,21 +169,22 @@ export function PipelinePage() {
 function DealCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
   const overdue =
     lead.nextTouchAt && new Date(lead.nextTouchAt).getTime() < Date.now();
+  const champion = lead.stakeholders.find((s) => s.role === "Champion");
   return (
-    <button
-      type="button"
+    <div
       onClick={onClick}
-      className="w-full text-left bg-white border border-ink-200 rounded-lg p-3 hover:border-brand-300 hover:shadow-card transition-all group"
+      className="bg-white border border-ink-200 rounded-lg p-3 hover:border-brand-300 hover:shadow-card transition-all group cursor-pointer"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-1 min-w-0 flex-1">
           <GripVertical className="h-3.5 w-3.5 text-ink-300 -ml-1 opacity-0 group-hover:opacity-100" />
           <div className="min-w-0">
-            <div className="text-[13px] font-semibold text-ink-900 truncate">
+            <div className="text-[13px] font-semibold text-ink-900 truncate flex items-center gap-1">
               {lead.name}
+              <UnreadEmailPill lead={lead} />
             </div>
             <div className="text-[11.5px] text-ink-500 truncate">
-              {lead.company}
+              {lead.company} · {lead.id}
             </div>
           </div>
         </div>
@@ -186,16 +195,46 @@ function DealCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
         <span className="text-sm font-semibold text-ink-900">
           {fmtMoney(lead.value)}
         </span>
-        {lead.urgencyScore >= 70 && (
-          <span className="badge-danger">
-            <AlertTriangle className="h-3 w-3" />
-            Hot
-          </span>
-        )}
-        {lead.urgencyScore < 70 && lead.urgencyScore >= 50 && (
-          <span className="badge-warning">Watch</span>
-        )}
+        <div className="flex items-center gap-1">
+          {lead.urgencyScore >= 70 && (
+            <span className="badge-danger">
+              <AlertTriangle className="h-3 w-3" />
+              Hot
+            </span>
+          )}
+          {lead.urgencyScore < 70 && lead.urgencyScore >= 50 && (
+            <span className="badge-warning">Watch</span>
+          )}
+          <DuplicatePill lead={lead} />
+        </div>
       </div>
+
+      {/* Champion / blocker / data issues — operational density */}
+      {(champion || lead.blockers.length > 0 || lead.dataIssues.length > 0) && (
+        <div className="mt-2 space-y-1">
+          {champion && (
+            <div className="flex items-center gap-1 text-[11px] text-ink-600">
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  champion.status === "engaged"
+                    ? "bg-success-500"
+                    : champion.status === "warm"
+                      ? "bg-warning-500"
+                      : "bg-danger-500"
+                }`}
+              />
+              <span className="font-medium truncate">{champion.name}</span>
+              <span className="text-ink-400 truncate">
+                · Champion {champion.status}
+              </span>
+            </div>
+          )}
+          <div className="flex items-center gap-1 flex-wrap">
+            <BlockerPills lead={lead} max={1} size="xs" />
+            <DataIssuePills lead={lead} max={1} />
+          </div>
+        </div>
+      )}
 
       <div className="mt-2 flex items-center justify-between text-[11px] text-ink-500">
         <span className="inline-flex items-center gap-1">
@@ -210,29 +249,23 @@ function DealCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
         {!overdue && lead.nextTouchAt && (
           <span>Next {relativeTime(lead.nextTouchAt)}</span>
         )}
+        {!lead.nextTouchAt && (
+          <span className="text-warning-700">No next touch</span>
+        )}
       </div>
 
-      {lead.tags.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {lead.tags.slice(0, 2).map((t) => (
-            <span
-              key={t}
-              className="text-[10px] px-1.5 py-0.5 rounded bg-ink-50 text-ink-600 border border-ink-200"
-            >
-              {t}
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-2 pt-2 border-t border-ink-100 text-[11px] text-ink-400 flex items-center justify-between">
-        <span className="inline-flex items-center gap-1">
+      <div className="mt-2 pt-2 border-t border-ink-100 flex items-center justify-between">
+        <span className="text-[11px] text-ink-500 inline-flex items-center gap-1 truncate flex-1 min-w-0">
           <Sparkles className="h-3 w-3 text-brand-600" />
-          {lead.recommendedAction.length > 28
-            ? lead.recommendedAction.slice(0, 28) + "…"
-            : lead.recommendedAction}
+          <span className="truncate">{lead.recommendedAction}</span>
         </span>
+        <div
+          className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <InlineActions lead={lead} variant="compact" />
+        </div>
       </div>
-    </button>
+    </div>
   );
 }

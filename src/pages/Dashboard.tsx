@@ -6,26 +6,31 @@ import { StaleWatchlist } from "../components/dashboard/StaleWatchlist";
 import { ActivityTimeline } from "../components/dashboard/ActivityTimeline";
 import { RepLeaderboard } from "../components/dashboard/RepLeaderboard";
 import { ForecastCard } from "../components/dashboard/ForecastCard";
+import { BottlenecksCard } from "../components/manager/BottlenecksCard";
+import { CoachingCard } from "../components/manager/CoachingCard";
 import { useAppState } from "../state/AppState";
-import { leads } from "../data/leads";
-import { tasks } from "../data/activities";
+import { useStore } from "../state/DataStore";
 import { fmtMoney } from "../lib/format";
+import { RepTodayView } from "../components/rep/RepTodayView";
 
 export function DashboardPage() {
-  const { role, currentUserId, currentUser, openAI } = useAppState();
+  const { role, currentUser, openAI } = useAppState();
+  const store = useStore();
 
-  const owned =
-    role === "rep"
-      ? leads.filter((l) => l.ownerId === currentUserId)
-      : leads;
+  // Rep view is a fundamentally different surface: execution-shaped, not dashboard-shaped.
+  if (role === "rep") {
+    return <RepTodayView />;
+  }
+
+  const owned = store.leads;
+  const tasks = store.tasks;
 
   const open = owned.filter(
     (l) => l.stage !== "closed_won" && l.stage !== "closed_lost",
   );
   const totalPipeline = open.reduce((s, l) => s + l.value, 0);
 
-  // Closing this month — close date within next 30 days
-  const now = new Date("2026-04-28T15:00:00.000Z").getTime();
+  const now = Date.now();
   const closingThisMonth = open.filter((l) => {
     const t = new Date(l.closeDate).getTime();
     return t - now <= 30 * 86400000 && t - now >= 0;
@@ -33,10 +38,7 @@ export function DashboardPage() {
   const closingValue = closingThisMonth.reduce((s, l) => s + l.value, 0);
 
   const overdueTasks = tasks.filter(
-    (t) =>
-      !t.done &&
-      new Date(t.due).getTime() < now &&
-      (role === "manager" || t.ownerId === currentUserId),
+    (t) => !t.done && new Date(t.due).getTime() < now,
   );
 
   // Recent closes for win-rate
@@ -60,6 +62,8 @@ export function DashboardPage() {
     : 0;
 
   const stalled = open.filter((l) => l.daysInactive >= 5).length;
+  const blockedDeals = open.filter((l) => l.blockers.length > 0);
+  const blockedValue = blockedDeals.reduce((s, l) => s + l.value, 0);
 
   // Sparkline mocks (small but distinctive shapes)
   const sparkUp = [40, 42, 41, 48, 52, 50, 58].map((v) => ({ v }));
@@ -73,19 +77,19 @@ export function DashboardPage() {
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <div className="text-[12px] text-ink-500">
-            {role === "manager"
-              ? `Welcome back, ${currentUser.name.split(" ")[0]} · Sales Manager view`
-              : `Welcome back, ${currentUser.name.split(" ")[0]} · Account Executive view`}
+            Welcome back, {currentUser.name.split(" ")[0]} · Sales Manager view
           </div>
           <h1 className="text-2xl font-semibold text-ink-900 tracking-tight">
-            {role === "manager"
-              ? "Team revenue command"
-              : "Today's command deck"}
+            Team revenue command
           </h1>
           <p className="text-sm text-ink-500 mt-0.5">
-            {role === "manager"
-              ? "Coverage, attainment, and pipeline health across the team."
-              : "Your highest-leverage actions, prioritized by urgency and deal value."}
+            <span className="font-semibold text-ink-700">
+              {fmtMoney(blockedValue)}
+            </span>{" "}
+            blocked across {blockedDeals.length} deals ·{" "}
+            <span className="font-semibold text-ink-700">{stalled}</span>{" "}
+            stalled · forecast confidence{" "}
+            <span className="font-semibold text-ink-700">71%</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -129,7 +133,7 @@ export function DashboardPage() {
         <Kpi
           label="Overdue follow-ups"
           value={String(overdueTasks.length)}
-          sub="Tasks past due date"
+          sub="Across the team"
           trend={{ delta: 3, label: "+3 vs. yesterday", good: "down" }}
           spark={sparkFlat}
           accent="#ef4444"
@@ -151,24 +155,28 @@ export function DashboardPage() {
           accent="#3a62ee"
         />
         <Kpi
-          label="Stalled deals"
-          value={String(stalled)}
-          sub="No activity in 5+ days"
-          trend={{ delta: 1.7, label: "vs. last week", good: "down" }}
+          label="Blocked value"
+          value={fmtMoney(blockedValue)}
+          sub={`${blockedDeals.length} deals with blockers`}
+          trend={{ delta: 5.4, label: "vs. last week", good: "down" }}
           spark={sparkFlat}
           accent="#f59e0b"
         />
       </div>
 
-      {/* Manager-only forecast row */}
-      {role === "manager" && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2">
-            <ForecastCard />
-          </div>
-          <RepLeaderboard />
+      {/* Forecast + Leaderboard */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2">
+          <ForecastCard />
         </div>
-      )}
+        <RepLeaderboard />
+      </div>
+
+      {/* Bottlenecks + Coaching — manager-only operational depth */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <BottlenecksCard />
+        <CoachingCard />
+      </div>
 
       {/* Funnel + Priority */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

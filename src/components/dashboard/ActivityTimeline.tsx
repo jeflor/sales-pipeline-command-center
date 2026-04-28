@@ -11,8 +11,7 @@ import {
 import type { ComponentType, SVGProps } from "react";
 import { Card, CardHeader } from "../ui/Card";
 import { Avatar } from "../ui/Avatar";
-import { activities } from "../../data/activities";
-import { leadsById } from "../../data/leads";
+import { useStore } from "../../state/DataStore";
 import { relativeTime } from "../../lib/format";
 import type { ActivityType } from "../../data/types";
 import { useAppState } from "../../state/AppState";
@@ -32,14 +31,18 @@ const iconFor: Record<
     tone: "bg-success-50 text-success-700",
   },
   proposal_sent: { Icon: FileText, tone: "bg-brand-50 text-brand-700" },
+  blocker_set: { Icon: StickyNote, tone: "bg-warning-50 text-warning-700" },
+  escalation: { Icon: ArrowRightLeft, tone: "bg-danger-50 text-danger-700" },
 };
 
 export function ActivityTimeline({ limit = 8 }: { limit?: number }) {
   const { openLead, role, currentUserId } = useAppState();
+  const store = useStore();
+  const leadsById = Object.fromEntries(store.leads.map((l) => [l.id, l]));
   const filtered =
     role === "rep"
-      ? activities.filter((a) => a.ownerId === currentUserId)
-      : activities;
+      ? store.activities.filter((a) => a.ownerId === currentUserId)
+      : store.activities;
   const sorted = [...filtered]
     .sort((a, b) => (a.at < b.at ? 1 : -1))
     .slice(0, limit);

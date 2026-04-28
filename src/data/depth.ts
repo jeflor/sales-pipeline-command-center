@@ -321,6 +321,14 @@ export const internalCommentsByLead: Record<string, InternalComment[]> = {
       body: "Will do. Avery is solid; the bottleneck is on their side, not interest.",
       at: daysAgo(1),
     },
+    {
+      id: "ic-1042-3",
+      leadId: "L-1042",
+      authorId: "rep_morgan",
+      body: "fyi @jordan — heard from a friend at helix that their CTO is leaving in 60d. could affect us, could not. flagging.",
+      at: daysAgo(4),
+      mentions: ["mgr_jordan"],
+    },
   ],
   "L-1029": [
     {
@@ -331,6 +339,20 @@ export const internalCommentsByLead: Record<string, InternalComment[]> = {
       at: daysAgo(2),
       mentions: ["rep_dante"],
     },
+    {
+      id: "ic-1029-2",
+      leadId: "L-1029",
+      authorId: "rep_dante",
+      body: "yeah i know. trying theo's EA tomorrow. if no response by EOW i'll escalate or shelve.",
+      at: daysAgo(2),
+    },
+    {
+      id: "ic-1029-3",
+      leadId: "L-1029",
+      authorId: "rep_dante",
+      body: "update: tried sarah (EA) - she said theo is in budget meetings all week. asked her to flag for thursday.",
+      at: daysAgo(1),
+    },
   ],
   "L-1019": [
     {
@@ -339,6 +361,58 @@ export const internalCommentsByLead: Record<string, InternalComment[]> = {
       authorId: "rep_kenji",
       body: "Possible duplicate of L-1009 (Mason & Hart) — similar size profile and they referenced an Owen on their team too. Worth checking.",
       at: daysAgo(4),
+    },
+    {
+      id: "ic-1019-2",
+      leadId: "L-1019",
+      authorId: "mgr_jordan",
+      body: "@kenji the routewise comparison is the wedge. lean on multi-site rollout speed not feature parity. your last competitive deal you led with features and it was a wash.",
+      at: daysAgo(3),
+      mentions: ["rep_kenji"],
+    },
+  ],
+  "L-1024": [
+    {
+      id: "ic-1024-1",
+      leadId: "L-1024",
+      authorId: "rep_priya",
+      body: "verbal yes from sasha — pilot terms TODAY. iris signed off. dont let this sit",
+      at: hoursAgo(4),
+    },
+    {
+      id: "ic-1024-2",
+      leadId: "L-1024",
+      authorId: "mgr_jordan",
+      body: "👏 nice work @priya. ping me if you need anything signed off",
+      at: hoursAgo(3),
+      mentions: ["rep_priya"],
+    },
+  ],
+  "L-1011": [
+    {
+      id: "ic-1011-1",
+      leadId: "L-1011",
+      authorId: "mgr_jordan",
+      body: "reassigned this to morgan from kenji - morgans enterprise close rate is materially higher and this is too important to lose on inexperience. @kenji no slight, you'll get the next one.",
+      at: daysAgo(12),
+      mentions: ["rep_kenji"],
+    },
+    {
+      id: "ic-1011-2",
+      leadId: "L-1011",
+      authorId: "rep_morgan",
+      body: "got it. will scope what kenji built, then drive champion ID this week.",
+      at: daysAgo(12),
+    },
+  ],
+  "L-1004": [
+    {
+      id: "ic-1004-1",
+      leadId: "L-1004",
+      authorId: "mgr_jordan",
+      body: "@kenji you have an unanswered reply going on day 4. do not let this die.",
+      at: daysAgo(2),
+      mentions: ["rep_kenji"],
     },
   ],
 };

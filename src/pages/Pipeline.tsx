@@ -21,6 +21,10 @@ import {
   DataIssuePills,
   DuplicatePill,
 } from "../components/signals/SignalPills";
+import { depthFor } from "../data/depth2";
+import { avgDaysInStage } from "../data/benchmarks";
+import { AILine } from "../components/ai/AIHint";
+import { Ban, MessageCircle } from "lucide-react";
 
 const stageAccent: Record<Stage, string> = {
   new_lead: "bg-ink-300",
@@ -170,6 +174,28 @@ function DealCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
   const overdue =
     lead.nextTouchAt && new Date(lead.nextTouchAt).getTime() < Date.now();
   const champion = lead.stakeholders.find((s) => s.role === "Champion");
+  const depth = depthFor(lead.id);
+  const openObjections = depth.objections.filter(
+    (o) => o.status !== "answered" && o.status !== "deferred",
+  );
+  const currentStageEntry = depth.stageHistory.find(
+    (h) => h.stage === lead.stage,
+  );
+  const daysInStage = currentStageEntry
+    ? Math.max(
+        0,
+        Math.floor(
+          (Date.now() - new Date(currentStageEntry.enteredAt).getTime()) /
+            86400000,
+        ),
+      )
+    : null;
+  const stageAvg = avgDaysInStage[lead.stage];
+  const slowStage =
+    daysInStage !== null && stageAvg && daysInStage > stageAvg * 1.5;
+  const competitorFlagged = depth.flags.includes("competitor_mentioned");
+  const champEngagement = depth.championEngagement;
+  const topInsight = depth.aiInsights[0];
   return (
     <div
       onClick={onClick}
@@ -209,32 +235,86 @@ function DealCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
         </div>
       </div>
 
-      {/* Champion / blocker / data issues — operational density */}
-      {(champion || lead.blockers.length > 0 || lead.dataIssues.length > 0) && (
-        <div className="mt-2 space-y-1">
-          {champion && (
-            <div className="flex items-center gap-1 text-[11px] text-ink-600">
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  champion.status === "engaged"
-                    ? "bg-success-500"
-                    : champion.status === "warm"
-                      ? "bg-warning-500"
-                      : "bg-danger-500"
-                }`}
-              />
-              <span className="font-medium truncate">{champion.name}</span>
-              <span className="text-ink-400 truncate">
-                · Champion {champion.status}
-              </span>
+      {/* Champion + engagement micro-bar */}
+      {champion && (
+        <div className="mt-2 flex items-center gap-2">
+          <div className="flex items-center gap-1 text-[11px] text-ink-600 min-w-0 flex-1">
+            <span
+              className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                champion.status === "engaged"
+                  ? "bg-success-500"
+                  : champion.status === "warm"
+                    ? "bg-warning-500"
+                    : champion.status === "blocking"
+                      ? "bg-danger-500"
+                      : "bg-ink-400"
+              }`}
+            />
+            <span className="font-medium truncate">{champion.name}</span>
+            <span className="text-ink-400 truncate">
+              · {champion.status}
+            </span>
+          </div>
+          {champEngagement && (
+            <div
+              className="flex items-end gap-px h-3 shrink-0"
+              title={`Champion engagement (last 6 weeks): ${champEngagement.join(", ")}`}
+            >
+              {champEngagement.map((v, i) => (
+                <span
+                  key={i}
+                  className={`w-1 rounded-sm ${
+                    v >= 7
+                      ? "bg-success-500"
+                      : v >= 4
+                        ? "bg-warning-500"
+                        : "bg-danger-500"
+                  }`}
+                  style={{ height: `${(v / 10) * 100}%` }}
+                />
+              ))}
             </div>
           )}
-          <div className="flex items-center gap-1 flex-wrap">
-            <BlockerPills lead={lead} max={1} size="xs" />
-            <DataIssuePills lead={lead} max={1} />
-          </div>
         </div>
       )}
+
+      {/* Friction signals row — objections, competitor, blockers, data issues */}
+      <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+        {openObjections.length > 0 && (
+          <span
+            title={openObjections.map((o) => o.topic).join(" · ")}
+            className="inline-flex items-center gap-1 rounded-md ring-1 ring-inset ring-warning-200 bg-warning-50 text-warning-700 px-1.5 py-0 text-[10.5px] font-medium"
+          >
+            <MessageCircle className="h-3 w-3" />
+            {openObjections.length} open obj
+          </span>
+        )}
+        {competitorFlagged && (
+          <span
+            className="inline-flex items-center gap-1 rounded-md ring-1 ring-inset ring-danger-200 bg-danger-50 text-danger-700 px-1.5 py-0 text-[10.5px] font-medium"
+            title="Competitor mentioned"
+          >
+            <Ban className="h-3 w-3" />
+            Competitor
+          </span>
+        )}
+        <BlockerPills lead={lead} max={1} size="xs" />
+        <DataIssuePills lead={lead} max={1} />
+      </div>
+
+      {/* Days in stage vs avg */}
+      {daysInStage !== null && stageAvg ? (
+        <div className="mt-1 text-[10.5px] text-ink-500">
+          <span
+            className={
+              slowStage ? "text-warning-700 font-semibold" : "text-ink-600"
+            }
+          >
+            {daysInStage}d in stage
+          </span>{" "}
+          <span className="text-ink-400">· avg {stageAvg}d</span>
+        </div>
+      ) : null}
 
       <div className="mt-2 flex items-center justify-between text-[11px] text-ink-500">
         <span className="inline-flex items-center gap-1">
@@ -253,6 +333,13 @@ function DealCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
           <span className="text-warning-700">No next touch</span>
         )}
       </div>
+
+      {/* AI insight (ambient, in-context) */}
+      {topInsight && (
+        <div className="mt-1.5">
+          <AILine weight={topInsight.weight}>{topInsight.body}</AILine>
+        </div>
+      )}
 
       <div className="mt-2 pt-2 border-t border-ink-100 flex items-center justify-between">
         <span className="text-[11px] text-ink-500 inline-flex items-center gap-1 truncate flex-1 min-w-0">

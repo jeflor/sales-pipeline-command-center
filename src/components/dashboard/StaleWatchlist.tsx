@@ -8,6 +8,8 @@ import { useAppState } from "../../state/AppState";
 import { repsById } from "../../data/reps";
 import { InlineActions } from "../actions/InlineActions";
 import { BlockerPills, UnreadEmailPill } from "../signals/SignalPills";
+import { depthFor } from "../../data/depth2";
+import { AILine } from "../ai/AIHint";
 
 export function StaleWatchlist() {
   const { role, currentUserId, openLead } = useAppState();
@@ -71,6 +73,14 @@ export function StaleWatchlist() {
                   <div className="text-[11.5px] text-ink-400">
                     {l.company}
                   </div>
+                  {(() => {
+                    const insight = depthFor(l.id).aiInsights[0];
+                    return insight ? (
+                      <div className="mt-1">
+                        <AILine weight={insight.weight}>{insight.body}</AILine>
+                      </div>
+                    ) : null;
+                  })()}
                 </td>
                 <td className="table-cell">
                   <Badge tone="neutral">

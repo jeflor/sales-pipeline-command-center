@@ -26,6 +26,8 @@ import {
   BlockerPills,
   UnreadEmailPill,
 } from "../signals/SignalPills";
+import { depthFor } from "../../data/depth2";
+import { AILine } from "../ai/AIHint";
 import { emailThreadsByLead } from "../../data/depth";
 import type { Task, Lead } from "../../data/types";
 
@@ -423,6 +425,7 @@ function FocusCard({ lead, rank }: { lead: Lead; rank: number }) {
   const { openLead, openAI, currentUserId } = useAppState();
   const store = useStore();
   const toast = useToast();
+  const insight = depthFor(lead.id).aiInsights[0];
   return (
     <button
       type="button"
@@ -449,6 +452,11 @@ function FocusCard({ lead, rank }: { lead: Lead; rank: number }) {
       {lead.blockers.length > 0 && (
         <div className="mt-1.5">
           <BlockerPills lead={lead} max={1} size="xs" />
+        </div>
+      )}
+      {insight && (
+        <div className="mt-1.5">
+          <AILine weight={insight.weight}>{insight.body}</AILine>
         </div>
       )}
       <div className="mt-2 rounded-md bg-ink-50/60 border border-ink-200 p-2 text-[12px] text-ink-700">

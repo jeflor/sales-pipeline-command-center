@@ -12,6 +12,7 @@ import { useAppState } from "../state/AppState";
 import { useStore } from "../state/DataStore";
 import { fmtMoney } from "../lib/format";
 import { RepTodayView } from "../components/rep/RepTodayView";
+import { depthFor } from "../data/depth2";
 
 export function DashboardPage() {
   const { role, currentUser, openAI } = useAppState();
@@ -65,6 +66,17 @@ export function DashboardPage() {
   const blockedDeals = open.filter((l) => l.blockers.length > 0);
   const blockedValue = blockedDeals.reduce((s, l) => s + l.value, 0);
 
+  // Ambient AI risk synthesis for the page header
+  const enterpriseStalled = open.filter(
+    (l) => l.value >= 80000 && l.daysInactive >= 7,
+  );
+  const competitorRisk = open.filter((l) =>
+    depthFor(l.id).flags.includes("competitor_mentioned"),
+  );
+  const ghostedChampions = open.filter((l) =>
+    depthFor(l.id).flags.includes("champion_ghosted"),
+  );
+
   // Sparkline mocks (small but distinctive shapes)
   const sparkUp = [40, 42, 41, 48, 52, 50, 58].map((v) => ({ v }));
   const sparkDown = [62, 58, 55, 50, 48, 44, 41].map((v) => ({ v }));
@@ -91,6 +103,18 @@ export function DashboardPage() {
             stalled · forecast confidence{" "}
             <span className="font-semibold text-ink-700">71%</span>
           </p>
+          {/* Ambient AI: synthesized risk line, not a button — just an observation */}
+          <div className="mt-2 inline-flex items-center gap-1.5 text-[12px] text-warning-700 bg-warning-50/60 ring-1 ring-warning-100 rounded-md px-2 py-0.5">
+            <Sparkles className="h-3 w-3" />
+            <span>
+              <span className="font-semibold">Forecast risk elevated</span> —{" "}
+              {enterpriseStalled.length} enterprise{" "}
+              {enterpriseStalled.length === 1 ? "deal" : "deals"} stalled,{" "}
+              {ghostedChampions.length} champion ghosted,{" "}
+              {competitorRisk.length} in active competitive eval. Worth a 1:1
+              this week.
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button className="btn-secondary" type="button">

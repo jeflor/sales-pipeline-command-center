@@ -12,6 +12,8 @@ import {
   BlockerPills,
   UnreadEmailPill,
 } from "../signals/SignalPills";
+import { depthFor } from "../../data/depth2";
+import { AILine } from "../ai/AIHint";
 
 const stageLabel = (id: string) =>
   STAGES.find((s) => s.id === id)?.label ?? id;
@@ -59,6 +61,7 @@ export function PriorityQueue() {
       <ul className="divide-y divide-ink-100 -mx-1">
         {ranked.map((l) => {
           const Icon = actionIcon(l.recommendedAction);
+          const topInsight = depthFor(l.id).aiInsights[0];
           return (
             <li
               key={l.id}
@@ -99,6 +102,13 @@ export function PriorityQueue() {
                   {l.blockers.length > 0 && (
                     <div className="mt-1.5">
                       <BlockerPills lead={l} max={2} />
+                    </div>
+                  )}
+                  {topInsight && (
+                    <div className="mt-1">
+                      <AILine weight={topInsight.weight}>
+                        {topInsight.body}
+                      </AILine>
                     </div>
                   )}
                   <div className="mt-1 text-[11px] text-ink-400">

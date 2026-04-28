@@ -25,6 +25,13 @@ import {
   Copy,
   ExternalLink,
   ChevronDown,
+  Target,
+  History,
+  Eye,
+  CircleHelp,
+  CheckCircle2,
+  Pin,
+  Link2,
 } from "lucide-react";
 import { useAppState } from "../../state/AppState";
 import { useStore } from "../../state/DataStore";
@@ -37,6 +44,8 @@ import {
   emailThreadsByLead,
   attachmentsByLead,
 } from "../../data/depth";
+import { depthFor } from "../../data/depth2";
+import { avgDaysInStage } from "../../data/benchmarks";
 import { Avatar } from "../ui/Avatar";
 import { Badge, RiskBadge } from "../ui/Badge";
 import {
@@ -44,12 +53,34 @@ import {
   DuplicatePill,
   EscalationPill,
 } from "../signals/SignalPills";
-import type { EmailMessage, Attachment } from "../../data/types";
+import { AIHint, AILine } from "../ai/AIHint";
+import type {
+  EmailMessage,
+  Attachment,
+  Objection,
+  ObjectionStatus,
+  ScorecardEntry,
+  StageHistoryEntry,
+  IntentSignal,
+  ManualOverride,
+  Lead,
+} from "../../data/types";
 import { fmtDate, fmtMoneyFull, relativeTime } from "../../lib/format";
 
 const stageOrder = STAGES.filter((s) => !s.closed || s.id === "closed_won");
 
-type Tab = "overview" | "stakeholders" | "blockers" | "emails" | "tasks" | "comments" | "files" | "history";
+type Tab =
+  | "overview"
+  | "scorecard"
+  | "objections"
+  | "stakeholders"
+  | "blockers"
+  | "intent"
+  | "emails"
+  | "tasks"
+  | "comments"
+  | "files"
+  | "history";
 
 export function LeadDrawer() {
   const { openLeadId, closeLead, openAI, openQuickLog, currentUserId } = useAppState();
@@ -90,6 +121,10 @@ export function LeadDrawer() {
   const emails = emailThreadsByLead[lead.id] ?? [];
   const attachments = attachmentsByLead[lead.id] ?? [];
   const comments = store.internalComments.filter((c) => c.leadId === lead.id);
+  const depth = depthFor(lead.id);
+  const openObjections = depth.objections.filter(
+    (o) => o.status !== "answered" && o.status !== "deferred",
+  );
 
   const moveStage = (to: Stage) => {
     store.changeStage({ leadId: lead.id, actorId: currentUserId, to });
@@ -115,6 +150,27 @@ export function LeadDrawer() {
               {store.activities.some(
                 (a) => a.leadId === lead.id && a.type === "escalation",
               ) && <EscalationPill />}
+              {/* Lived-in flags */}
+              {depth.flags.includes("decision_maker_changed") && (
+                <span className="badge-warning">Decision-maker changed</span>
+              )}
+              {depth.flags.includes("champion_ghosted") && (
+                <span className="badge-danger">Champion ghosted</span>
+              )}
+              {depth.flags.includes("manually_advanced") && (
+                <span className="badge-warning">Manually advanced</span>
+              )}
+              {depth.flags.includes("rep_handoff") && (
+                <span className="badge-neutral">Rep handoff</span>
+              )}
+              {depth.flags.includes("legacy_migrated") && (
+                <span
+                  className="text-[10px] text-ink-400 font-mono"
+                  title="Migrated from legacy CRM"
+                >
+                  legacy
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1">
               <button
@@ -388,6 +444,23 @@ export function LeadDrawer() {
             <TabBtn id="overview" tab={tab} onClick={() => setTab("overview")}>
               Overview
             </TabBtn>
+            <TabBtn id="scorecard" tab={tab} onClick={() => setTab("scorecard")}>
+              Scorecard
+              {depth.scorecard.length > 0 && (
+                <span className="ml-1 text-[10px] text-ink-400 font-semibold">
+                  {depth.scorecard.filter((s) => s.value).length}/
+                  {depth.scorecard.length}
+                </span>
+              )}
+            </TabBtn>
+            <TabBtn id="objections" tab={tab} onClick={() => setTab("objections")}>
+              Objections
+              {openObjections.length > 0 && (
+                <span className="ml-1 inline-flex items-center justify-center text-[10px] bg-warning-100 text-warning-700 rounded-full px-1.5">
+                  {openObjections.length} open
+                </span>
+              )}
+            </TabBtn>
             <TabBtn id="stakeholders" tab={tab} onClick={() => setTab("stakeholders")}>
               Stakeholders
               <span className="ml-1 text-[10px] text-ink-400 font-semibold">
@@ -399,6 +472,14 @@ export function LeadDrawer() {
               {lead.blockers.length > 0 && (
                 <span className="ml-1 inline-flex items-center justify-center text-[10px] bg-warning-100 text-warning-700 rounded-full px-1.5">
                   {lead.blockers.length}
+                </span>
+              )}
+            </TabBtn>
+            <TabBtn id="intent" tab={tab} onClick={() => setTab("intent")}>
+              Intent
+              {depth.intentSignals.length > 0 && (
+                <span className="ml-1 text-[10px] text-ink-400 font-semibold">
+                  {depth.intentSignals.length}
                 </span>
               )}
             </TabBtn>
@@ -438,9 +519,25 @@ export function LeadDrawer() {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
-          {tab === "overview" && <OverviewTab lead={lead} />}
+          {tab === "overview" && (
+            <OverviewTab lead={lead} depth={depth} openObjections={openObjections} />
+          )}
+          {tab === "scorecard" && (
+            <ScorecardTab lead={lead} entries={depth.scorecard} />
+          )}
+          {tab === "objections" && (
+            <ObjectionsTab lead={lead} objections={depth.objections} />
+          )}
           {tab === "stakeholders" && <StakeholdersTab lead={lead} />}
           {tab === "blockers" && <BlockersTab lead={lead} />}
+          {tab === "intent" && (
+            <IntentTab
+              lead={lead}
+              signals={depth.intentSignals}
+              touchPattern={depth.recentTouchPattern}
+              championEngagement={depth.championEngagement}
+            />
+          )}
           {tab === "emails" && <EmailsTab lead={lead} emails={emails} />}
           {tab === "tasks" && <TasksTab lead={lead} tasks={leadTasks} />}
           {tab === "comments" && (
@@ -448,7 +545,12 @@ export function LeadDrawer() {
           )}
           {tab === "files" && <FilesTab attachments={attachments} />}
           {tab === "history" && (
-            <HistoryTab lead={lead} activities={leadActivities} />
+            <HistoryTab
+              lead={lead}
+              activities={leadActivities}
+              stageHistory={depth.stageHistory}
+              overrides={depth.manualOverrides}
+            />
           )}
         </div>
       </aside>
@@ -502,10 +604,49 @@ function Section({
   );
 }
 
-function OverviewTab({ lead }: { lead: ReturnType<typeof useStore>["leads"][number] }) {
-  const { openAI } = useAppState();
+function OverviewTab({
+  lead,
+  depth,
+  openObjections,
+}: {
+  lead: Lead;
+  depth: ReturnType<typeof depthFor>;
+  openObjections: Objection[];
+}) {
+  const { openAI, currentUserId } = useAppState();
+  const store = useStore();
+  const toast = useToast();
+  const [draftNote, setDraftNote] = useState("");
+  const currentStageEntered = depth.stageHistory.find(
+    (h) => h.stage === lead.stage,
+  );
+  const daysInStage = currentStageEntered
+    ? Math.max(
+        0,
+        Math.floor(
+          (Date.now() - new Date(currentStageEntered.enteredAt).getTime()) /
+            86400000,
+        ),
+      )
+    : null;
+  const stageAvg = avgDaysInStage[lead.stage];
+  const lastConfidenceOverride = depth.manualOverrides.find(
+    (m) => m.field === "confidence",
+  );
+  const lastDateOverride = depth.manualOverrides.find(
+    (m) => m.field === "close_date",
+  );
+  const lastStageOverride = depth.manualOverrides.find(
+    (m) => m.field === "stage",
+  );
+  const lastOwnerOverride = depth.manualOverrides.find(
+    (m) => m.field === "owner",
+  );
+  const pinnedNote = depth.fieldNotes.find((n) => n.pinned);
+
   return (
     <div className="p-5 space-y-5">
+      {/* AI deal summary + ambient insights */}
       <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-4">
         <div className="flex items-center gap-2 mb-2">
           <Sparkles className="h-4 w-4 text-brand-700" />
@@ -516,6 +657,24 @@ function OverviewTab({ lead }: { lead: ReturnType<typeof useStore>["leads"][numb
         <p className="text-[13.5px] text-ink-800 leading-relaxed">
           {lead.aiSummary}
         </p>
+        {depth.aiInsights.length > 0 && (
+          <ul className="mt-3 space-y-1.5">
+            {depth.aiInsights.map((i) => (
+              <li key={i.id} className="flex items-start gap-2">
+                <span
+                  className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 ${
+                    i.weight === "high"
+                      ? "bg-warning-500"
+                      : i.weight === "medium"
+                        ? "bg-brand-500"
+                        : "bg-ink-300"
+                  }`}
+                />
+                <span className="text-[12.5px] text-ink-800">{i.body}</span>
+              </li>
+            ))}
+          </ul>
+        )}
         <button
           type="button"
           onClick={() => openAI(lead.id)}
@@ -524,6 +683,61 @@ function OverviewTab({ lead }: { lead: ReturnType<typeof useStore>["leads"][numb
           Open full assistant →
         </button>
       </div>
+
+      {/* Pinned note (if any) — sloppy, lived-in, in the rep's voice */}
+      {pinnedNote && (
+        <div className="rounded-lg border border-warning-200 bg-warning-50/40 p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <Pin className="h-3.5 w-3.5 text-warning-700" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-warning-700">
+              Pinned by {repsById[pinnedNote.by]?.name.split(" ")[0] ?? "owner"}
+            </span>
+            <span className="text-[10px] text-ink-400">
+              · {relativeTime(pinnedNote.at)}
+            </span>
+          </div>
+          <p className="text-[12.5px] text-ink-800 italic leading-relaxed">
+            "{pinnedNote.body}"
+          </p>
+        </div>
+      )}
+
+      {/* Open objections — compact view */}
+      {openObjections.length > 0 && (
+        <Section
+          title={`Open objections (${openObjections.length})`}
+          right={
+            <button
+              type="button"
+              onClick={() => openAI(lead.id)}
+              className="text-[11px] text-brand-700 font-semibold inline-flex items-center gap-1 hover:underline"
+            >
+              <Sparkles className="h-3 w-3" />
+              AI: prep responses
+            </button>
+          }
+        >
+          <ul className="space-y-1.5">
+            {openObjections.slice(0, 3).map((o) => (
+              <li
+                key={o.id}
+                className="flex items-start gap-2 p-2 rounded-md border border-ink-200 bg-white"
+              >
+                <CircleHelp className="h-3.5 w-3.5 text-warning-600 mt-0.5 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12.5px] font-medium text-ink-900">
+                    {o.topic}
+                  </div>
+                  <div className="text-[11px] text-ink-500">
+                    {o.raisedBy} · {relativeTime(o.raisedAt)} ·{" "}
+                    <ObjectionStatusPill status={o.status} />
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
 
       <div className="grid grid-cols-2 gap-5">
         <Section title="Contact">
@@ -555,17 +769,34 @@ function OverviewTab({ lead }: { lead: ReturnType<typeof useStore>["leads"][numb
                 ? `${fmtDate(lead.nextTouchAt)} (${relativeTime(lead.nextTouchAt)})`
                 : "— (set one)"
             }
+            warn={!lead.nextTouchAt}
           />
           <Row icon={Tag} label="Source" value={lead.source} />
+          {depth.conflictingSource && (
+            <Row
+              icon={AlertOctagon}
+              label="Source conflict"
+              value={depth.conflictingSource}
+              warn
+            />
+          )}
+          {depth.bestCallWindow && (
+            <div className="mt-2">
+              <AIHint weight="medium">
+                Best call window: {depth.bestCallWindow}
+              </AIHint>
+            </div>
+          )}
         </Section>
       </div>
 
+      {/* Signal + scoring with ambient AI + override surfacing */}
       <Section title="Signal & scoring">
         <div className="grid grid-cols-3 gap-3">
           <Stat
             label="Urgency"
             value={String(lead.urgencyScore)}
-            sub="Composite score"
+            sub="Composite"
             accent={
               lead.urgencyScore >= 70
                 ? "danger"
@@ -577,7 +808,11 @@ function OverviewTab({ lead }: { lead: ReturnType<typeof useStore>["leads"][numb
           <Stat
             label="Confidence"
             value={`${lead.confidence}%`}
-            sub="Win likelihood"
+            sub={
+              lastConfidenceOverride
+                ? `Manual: ${lastConfidenceOverride.oldValue} → ${lastConfidenceOverride.newValue}`
+                : "Win likelihood"
+            }
             accent={
               lead.confidence >= 65
                 ? "success"
@@ -585,17 +820,20 @@ function OverviewTab({ lead }: { lead: ReturnType<typeof useStore>["leads"][numb
                   ? "neutral"
                   : "warning"
             }
+            override={!!lastConfidenceOverride}
           />
           <Stat
-            label="Days inactive"
-            value={`${lead.daysInactive}d`}
-            sub="Since last touch"
+            label="Time in stage"
+            value={daysInStage !== null ? `${daysInStage}d` : "—"}
+            sub={
+              stageAvg
+                ? `vs ${stageAvg}d avg`
+                : "—"
+            }
             accent={
-              lead.daysInactive >= 12
-                ? "danger"
-                : lead.daysInactive >= 7
-                  ? "warning"
-                  : "neutral"
+              daysInStage !== null && stageAvg && daysInStage > stageAvg * 1.5
+                ? "warning"
+                : "neutral"
             }
           />
         </div>
@@ -612,10 +850,126 @@ function OverviewTab({ lead }: { lead: ReturnType<typeof useStore>["leads"][numb
             .
           </div>
         </div>
+
+        {/* Manual override audit — surface that humans have touched this */}
+        {(lastDateOverride || lastStageOverride || lastOwnerOverride) && (
+          <ul className="mt-3 space-y-1 text-[11.5px]">
+            {lastDateOverride && (
+              <li className="flex items-center gap-1.5 text-ink-600">
+                <History className="h-3 w-3 text-ink-400" />
+                Close date manually moved{" "}
+                <span className="font-semibold text-ink-800">
+                  {lastDateOverride.oldValue} → {lastDateOverride.newValue}
+                </span>{" "}
+                by {repsById[lastDateOverride.by]?.name.split(" ")[0]} ·{" "}
+                {relativeTime(lastDateOverride.at)}
+              </li>
+            )}
+            {lastStageOverride && (
+              <li className="flex items-center gap-1.5 text-ink-600">
+                <History className="h-3 w-3 text-ink-400" />
+                Stage manually advanced from{" "}
+                <span className="font-semibold text-ink-800">
+                  {lastStageOverride.oldValue} → {lastStageOverride.newValue}
+                </span>{" "}
+                by {repsById[lastStageOverride.by]?.name.split(" ")[0]} ·{" "}
+                {relativeTime(lastStageOverride.at)}
+              </li>
+            )}
+            {lastOwnerOverride && (
+              <li className="flex items-center gap-1.5 text-ink-600">
+                <History className="h-3 w-3 text-ink-400" />
+                Reassigned from{" "}
+                {repsById[lastOwnerOverride.oldValue]?.name.split(" ")[0] ??
+                  "former owner"}{" "}
+                by {repsById[lastOwnerOverride.by]?.name.split(" ")[0]} ·{" "}
+                {relativeTime(lastOwnerOverride.at)}
+              </li>
+            )}
+          </ul>
+        )}
+
+        {/* Linked deals */}
+        {depth.linkedDeals && depth.linkedDeals.length > 0 && (
+          <div className="mt-3 text-[11.5px] text-ink-600">
+            <span className="inline-flex items-center gap-1">
+              <Link2 className="h-3 w-3 text-ink-400" />
+              Linked:
+            </span>{" "}
+            {depth.linkedDeals.map((d, i) => (
+              <span key={d.id}>
+                {i > 0 && ", "}
+                <span className="font-semibold text-ink-800">{d.id}</span>{" "}
+                <span className="text-ink-500">({d.relationship})</span>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Legacy ID — migration trace */}
+        {depth.legacyId && (
+          <div className="mt-1 text-[11px] text-ink-400 font-mono">
+            Migrated from HubSpot · legacy ID: {depth.legacyId}
+          </div>
+        )}
       </Section>
 
-      <Section title="Notes">
-        <p className="text-[13px] text-ink-700 leading-relaxed">{lead.notes}</p>
+      <Section title="Field notes">
+        {/* Original notes (from base lead) */}
+        <p className="text-[13px] text-ink-700 leading-relaxed mb-3">
+          {lead.notes}
+        </p>
+
+        {/* Sloppy field notes — the kind reps actually leave */}
+        {depth.fieldNotes.length > 0 && (
+          <ul className="space-y-2">
+            {depth.fieldNotes
+              .filter((n) => !n.pinned)
+              .map((n) => (
+                <li
+                  key={n.id}
+                  className="rounded-md border border-ink-200 bg-white p-2.5"
+                >
+                  <p className="text-[12.5px] text-ink-700 leading-relaxed italic">
+                    "{n.body}"
+                  </p>
+                  <div className="mt-1 text-[10.5px] text-ink-400">
+                    {repsById[n.by]?.name.split(" ")[0] ?? "rep"} ·{" "}
+                    {relativeTime(n.at)}
+                  </div>
+                </li>
+              ))}
+          </ul>
+        )}
+
+        {/* Quick-add note inline */}
+        <div className="mt-3 rounded-md border border-ink-200 p-2 bg-ink-50/40">
+          <textarea
+            rows={2}
+            value={draftNote}
+            onChange={(e) => setDraftNote(e.target.value)}
+            placeholder="Add a quick note (typos welcome)…"
+            className="w-full text-[12.5px] resize-none focus:outline-none bg-transparent"
+          />
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              disabled={!draftNote.trim()}
+              onClick={() => {
+                store.addNote({
+                  leadId: lead.id,
+                  actorId: currentUserId,
+                  body: draftNote.trim(),
+                });
+                toast.success("Note saved");
+                setDraftNote("");
+              }}
+              className="btn-primary text-[11.5px] py-1 px-2"
+            >
+              Save note
+            </button>
+          </div>
+        </div>
       </Section>
 
       <Section title="Tags">
@@ -626,6 +980,341 @@ function OverviewTab({ lead }: { lead: ReturnType<typeof useStore>["leads"][numb
             </span>
           ))}
         </div>
+      </Section>
+    </div>
+  );
+}
+
+function ObjectionStatusPill({ status }: { status: ObjectionStatus }) {
+  const map: Record<
+    ObjectionStatus,
+    { label: string; cls: string }
+  > = {
+    open: { label: "Open", cls: "bg-warning-50 text-warning-700 ring-warning-100" },
+    answered: {
+      label: "Answered",
+      cls: "bg-success-50 text-success-700 ring-success-100",
+    },
+    waiting_on_us: {
+      label: "Waiting on us",
+      cls: "bg-danger-50 text-danger-700 ring-danger-100",
+    },
+    waiting_on_them: {
+      label: "Waiting on them",
+      cls: "bg-ink-100 text-ink-600 ring-ink-200",
+    },
+    deferred: { label: "Deferred", cls: "bg-ink-100 text-ink-500 ring-ink-200" },
+  };
+  const c = map[status];
+  return (
+    <span
+      className={`inline-flex items-center px-1.5 py-0 rounded-md ring-1 ring-inset text-[10.5px] font-semibold ${c.cls}`}
+    >
+      {c.label}
+    </span>
+  );
+}
+
+function ScorecardTab({
+  lead,
+  entries,
+}: {
+  lead: Lead;
+  entries: ScorecardEntry[];
+}) {
+  const { openAI } = useAppState();
+  if (entries.length === 0) {
+    return (
+      <div className="p-5">
+        <EmptyState
+          title="No scorecard yet"
+          body="Use this section to map MEDDIC-style decision criteria as you discover them."
+        />
+      </div>
+    );
+  }
+  const filled = entries.filter((e) => e.value).length;
+  return (
+    <div className="p-5 space-y-3">
+      <div className="flex items-center justify-between text-[12px] text-ink-500">
+        <span>
+          <span className="font-semibold text-ink-800">
+            {filled}/{entries.length}
+          </span>{" "}
+          slots filled · partial scorecards are normal — fill as you learn
+        </span>
+        <button
+          type="button"
+          onClick={() => openAI(lead.id)}
+          className="text-[11.5px] text-brand-700 font-semibold inline-flex items-center gap-1 hover:underline"
+        >
+          <Sparkles className="h-3 w-3" />
+          AI: suggest discovery questions
+        </button>
+      </div>
+      <ul className="space-y-1.5">
+        {entries.map((e) => {
+          const empty = !e.value;
+          return (
+            <li
+              key={e.slot}
+              className={`flex items-start gap-3 rounded-lg border p-3 ${
+                empty
+                  ? "border-dashed border-ink-200 bg-ink-50/30"
+                  : "border-ink-200 bg-white"
+              }`}
+            >
+              <Target
+                className={`h-4 w-4 mt-0.5 shrink-0 ${
+                  empty ? "text-ink-300" : "text-brand-600"
+                }`}
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[12.5px] font-semibold text-ink-900">
+                    {e.slot}
+                  </span>
+                  {e.confidence && (
+                    <span
+                      className={`text-[10px] uppercase tracking-wider font-semibold px-1.5 rounded ${
+                        e.confidence === "high"
+                          ? "bg-success-50 text-success-700"
+                          : e.confidence === "medium"
+                            ? "bg-warning-50 text-warning-700"
+                            : "bg-ink-100 text-ink-500"
+                      }`}
+                    >
+                      {e.confidence}
+                    </span>
+                  )}
+                </div>
+                <p
+                  className={`mt-0.5 text-[13px] leading-relaxed ${
+                    empty ? "text-ink-400 italic" : "text-ink-700"
+                  }`}
+                >
+                  {e.value ?? "Unknown — needs discovery"}
+                </p>
+              </div>
+              {empty && (
+                <button
+                  type="button"
+                  className="text-[11px] text-brand-700 font-semibold hover:underline shrink-0"
+                >
+                  Fill
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function ObjectionsTab({
+  lead,
+  objections,
+}: {
+  lead: Lead;
+  objections: Objection[];
+}) {
+  const { openAI } = useAppState();
+  if (objections.length === 0) {
+    return (
+      <div className="p-5">
+        <EmptyState
+          title="No objections logged"
+          body="When prospects raise pricing, security, timing, or competitive concerns — log them here so they don't slip."
+        />
+      </div>
+    );
+  }
+  const open = objections.filter(
+    (o) => o.status !== "answered" && o.status !== "deferred",
+  );
+  const closed = objections.filter(
+    (o) => o.status === "answered" || o.status === "deferred",
+  );
+  return (
+    <div className="p-5 space-y-4">
+      {open.length > 0 && (
+        <div>
+          <div className="h-eyebrow mb-2 inline-flex items-center gap-1">
+            Open ({open.length})
+            <button
+              type="button"
+              onClick={() => openAI(lead.id)}
+              className="ml-2 text-[11px] text-brand-700 font-semibold hover:underline normal-case tracking-normal inline-flex items-center gap-1"
+            >
+              <Sparkles className="h-3 w-3" />
+              AI: prep responses
+            </button>
+          </div>
+          <ul className="space-y-2">
+            {open.map((o) => (
+              <ObjectionRow key={o.id} o={o} />
+            ))}
+          </ul>
+        </div>
+      )}
+      {closed.length > 0 && (
+        <div>
+          <div className="h-eyebrow mb-2">
+            Resolved ({closed.length})
+          </div>
+          <ul className="space-y-2">
+            {closed.map((o) => (
+              <ObjectionRow key={o.id} o={o} muted />
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ObjectionRow({ o, muted }: { o: Objection; muted?: boolean }) {
+  return (
+    <li
+      className={`rounded-lg border p-3 ${
+        muted
+          ? "border-ink-200 bg-ink-50/40 opacity-80"
+          : "border-warning-200 bg-warning-50/30"
+      }`}
+    >
+      <div className="flex items-start gap-2">
+        <CircleHelp
+          className={`h-4 w-4 mt-0.5 ${muted ? "text-ink-400" : "text-warning-700"}`}
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className={`text-[13px] font-semibold ${muted ? "text-ink-700" : "text-ink-900"}`}
+            >
+              {o.topic}
+            </span>
+            <ObjectionStatusPill status={o.status} />
+          </div>
+          {o.detail && (
+            <p className="text-[12px] text-ink-700 mt-0.5">{o.detail}</p>
+          )}
+          {o.ownerNote && (
+            <p className="text-[11.5px] text-ink-500 mt-1 italic">
+              Owner note: {o.ownerNote}
+            </p>
+          )}
+          <div className="mt-1 text-[11px] text-ink-400">
+            Raised by {o.raisedBy} · {relativeTime(o.raisedAt)}
+          </div>
+        </div>
+        {!muted && (
+          <button
+            type="button"
+            className="text-[11px] font-semibold text-success-700 hover:underline shrink-0"
+          >
+            Mark answered
+          </button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function IntentTab({
+  signals,
+  touchPattern,
+  championEngagement,
+}: {
+  lead: Lead;
+  signals: IntentSignal[];
+  touchPattern?: number[];
+  championEngagement?: number[];
+}) {
+  return (
+    <div className="p-5 space-y-5">
+      {/* Touch cadence sparkbars */}
+      {touchPattern && (
+        <Section
+          title="Touch cadence · last 14 days"
+          right={
+            <AILine weight="medium">
+              {touchPattern.reduce((a, b) => a + b, 0)} touches in window
+            </AILine>
+          }
+        >
+          <div className="flex items-end gap-1 h-10">
+            {touchPattern.map((v, i) => (
+              <div
+                key={i}
+                className="flex-1 rounded-sm bg-ink-200"
+                style={{
+                  height: `${Math.max(4, v * 18)}%`,
+                  backgroundColor: v === 0 ? "#eef0f4" : "#3a62ee",
+                }}
+                title={`${v} touch${v === 1 ? "" : "es"} on day ${i - 13 < 0 ? `${i - 13}d` : "today"}`}
+              />
+            ))}
+          </div>
+          <div className="mt-1 flex items-center justify-between text-[10.5px] text-ink-400">
+            <span>14d ago</span>
+            <span>Today</span>
+          </div>
+        </Section>
+      )}
+
+      {/* Champion engagement trajectory */}
+      {championEngagement && (
+        <Section title="Champion engagement · last 6 weeks">
+          <div className="flex items-end gap-1 h-10">
+            {championEngagement.map((v, i) => (
+              <div
+                key={i}
+                className={`flex-1 rounded-sm ${
+                  v >= 7
+                    ? "bg-success-500"
+                    : v >= 4
+                      ? "bg-warning-500"
+                      : "bg-danger-500"
+                }`}
+                style={{ height: `${(v / 10) * 100}%` }}
+                title={`Week ${i + 1}: ${v}/10`}
+              />
+            ))}
+          </div>
+          <div className="mt-1 flex items-center justify-between text-[10.5px] text-ink-400">
+            <span>6 weeks ago</span>
+            <span>This week ({championEngagement[championEngagement.length - 1]}/10)</span>
+          </div>
+        </Section>
+      )}
+
+      {/* Intent signals feed */}
+      <Section title={`Intent signals (${signals.length})`}>
+        {signals.length === 0 ? (
+          <div className="text-[12px] text-ink-500 italic">
+            No intent signals captured for this deal yet.
+          </div>
+        ) : (
+          <ul className="space-y-1.5">
+            {signals
+              .sort((a, b) => (a.at < b.at ? 1 : -1))
+              .map((s) => (
+                <li
+                  key={s.id}
+                  className="rounded-lg border border-ink-200 p-2.5 flex items-start gap-3"
+                >
+                  <Eye className="h-3.5 w-3.5 text-brand-600 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12.5px] text-ink-800">{s.detail}</div>
+                    <div className="text-[10.5px] text-ink-400 mt-0.5">
+                      {relativeTime(s.at)} · weight {s.weight}/10
+                    </div>
+                  </div>
+                </li>
+              ))}
+          </ul>
+        )}
       </Section>
     </div>
   );
@@ -1171,9 +1860,13 @@ function FilesTab({
 function HistoryTab({
   lead,
   activities,
+  stageHistory,
+  overrides,
 }: {
-  lead: ReturnType<typeof useStore>["leads"][number];
+  lead: Lead;
   activities: ReturnType<typeof activityForLead>;
+  stageHistory: StageHistoryEntry[];
+  overrides: ManualOverride[];
 }) {
   const store = useStore();
   // Merge real-time activities from the store with the seeded history
@@ -1186,35 +1879,127 @@ function HistoryTab({
     a.at < b.at ? 1 : -1,
   );
   return (
-    <div className="p-5">
-      <ol className="space-y-3.5 relative">
-        {merged.map((a) => (
-          <li
-            key={a.id}
-            className="relative pl-6 border-l-2 border-ink-100 ml-2 pb-2"
-          >
-            <span className="absolute -left-[7px] top-0 h-3 w-3 rounded-full bg-brand-500 ring-4 ring-white" />
-            <div className="text-[13px] font-medium text-ink-900">
-              {a.summary}
-            </div>
-            {a.detail && (
-              <p className="text-[12px] text-ink-500 mt-0.5">{a.detail}</p>
-            )}
-            <div className="mt-1 text-[11px] text-ink-400 flex items-center gap-1.5">
-              <Avatar ownerId={a.ownerId} size="xs" />
-              <span className="font-medium text-ink-600">
-                {repsById[a.ownerId]?.name}
-              </span>
-              <span>·</span>
-              <span>{relativeTime(a.at)}</span>
-            </div>
-          </li>
-        ))}
-      </ol>
-      <div className="mt-4 pt-3 border-t border-ink-100 text-[11px] text-ink-400 flex items-center gap-1.5">
+    <div className="p-5 space-y-5">
+      {/* Stage progression with manual override flags */}
+      {stageHistory.length > 0 && (
+        <Section title="Stage progression">
+          <ol className="space-y-1">
+            {stageHistory.map((h, i) => {
+              const next = stageHistory[i + 1];
+              const inStageDays = next
+                ? Math.floor(
+                    (new Date(next.enteredAt).getTime() -
+                      new Date(h.enteredAt).getTime()) /
+                      86400000,
+                  )
+                : Math.floor(
+                    (Date.now() - new Date(h.enteredAt).getTime()) / 86400000,
+                  );
+              const avg = avgDaysInStage[h.stage];
+              const slow = avg && inStageDays > avg * 1.5;
+              return (
+                <li
+                  key={i}
+                  className="flex items-center gap-3 rounded-md border border-ink-200 bg-white px-3 py-2"
+                >
+                  <CheckCircle2
+                    className={`h-3.5 w-3.5 ${
+                      h.manualOverride ? "text-warning-600" : "text-brand-600"
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12.5px] font-medium text-ink-900">
+                      {STAGES.find((s) => s.id === h.stage)?.label}
+                      {h.manualOverride && (
+                        <span className="ml-2 text-[10px] uppercase tracking-wider font-semibold text-warning-700 bg-warning-50 px-1 rounded">
+                          Manual
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-ink-500">
+                      Entered {fmtDate(h.enteredAt)} ·{" "}
+                      {repsById[h.by]?.name.split(" ")[0] ?? h.by}
+                      {h.note && ` · ${h.note}`}
+                    </div>
+                  </div>
+                  <span
+                    className={`text-[11.5px] font-semibold shrink-0 ${
+                      slow ? "text-warning-700" : "text-ink-700"
+                    }`}
+                  >
+                    {inStageDays}d{avg ? ` (avg ${avg}d)` : ""}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </Section>
+      )}
+
+      {/* Manual overrides — visible audit */}
+      {overrides.length > 0 && (
+        <Section title={`Manual overrides (${overrides.length})`}>
+          <ul className="space-y-1.5">
+            {overrides.map((o) => (
+              <li
+                key={o.id}
+                className="flex items-start gap-2 rounded-md border border-ink-200 bg-warning-50/30 px-3 py-2"
+              >
+                <History className="h-3.5 w-3.5 text-warning-600 mt-0.5" />
+                <div className="flex-1 min-w-0 text-[12px]">
+                  <div className="text-ink-800">
+                    <span className="font-semibold capitalize">
+                      {o.field.replace("_", " ")}
+                    </span>
+                    : <span className="text-ink-500">{o.oldValue}</span>{" "}
+                    →{" "}
+                    <span className="font-semibold text-ink-900">
+                      {o.newValue}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-ink-500">
+                    {repsById[o.by]?.name.split(" ")[0]} ·{" "}
+                    {relativeTime(o.at)}
+                    {o.note && ` · ${o.note}`}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
+      <Section title={`Activity log (${merged.length})`}>
+        <ol className="space-y-3.5 relative">
+          {merged.map((a) => (
+            <li
+              key={a.id}
+              className="relative pl-6 border-l-2 border-ink-100 ml-2 pb-2"
+            >
+              <span className="absolute -left-[7px] top-0 h-3 w-3 rounded-full bg-brand-500 ring-4 ring-white" />
+              <div className="text-[13px] font-medium text-ink-900">
+                {a.summary}
+              </div>
+              {a.detail && (
+                <p className="text-[12px] text-ink-500 mt-0.5">{a.detail}</p>
+              )}
+              <div className="mt-1 text-[11px] text-ink-400 flex items-center gap-1.5">
+                <Avatar ownerId={a.ownerId} size="xs" />
+                <span className="font-medium text-ink-600">
+                  {repsById[a.ownerId]?.name}
+                </span>
+                <span>·</span>
+                <span>{relativeTime(a.at)}</span>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </Section>
+
+      <div className="pt-3 border-t border-ink-100 text-[11px] text-ink-400 flex items-center gap-1.5">
         <Users className="h-3 w-3" />
-        Audit trail · {merged.length} events · created{" "}
-        {fmtDate(lead.createdAt)}
+        Audit trail · {merged.length} activity events · {overrides.length}{" "}
+        manual overrides · created {fmtDate(lead.createdAt)}
       </div>
     </div>
   );
@@ -1225,19 +2010,27 @@ function Row({
   label,
   value,
   mono,
+  warn,
 }: {
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   label: string;
   value: string;
   mono?: boolean;
+  warn?: boolean;
 }) {
   return (
     <div className="flex items-start gap-2.5 text-[12.5px] py-1">
-      <Icon className="h-3.5 w-3.5 text-ink-400 mt-0.5" />
+      <Icon
+        className={`h-3.5 w-3.5 mt-0.5 ${warn ? "text-warning-600" : "text-ink-400"}`}
+      />
       <div className="flex-1 min-w-0">
-        <div className="text-[11px] text-ink-400 leading-tight">{label}</div>
         <div
-          className={`text-ink-800 ${mono ? "font-mono text-[12.5px]" : ""} truncate`}
+          className={`text-[11px] leading-tight ${warn ? "text-warning-700" : "text-ink-400"}`}
+        >
+          {label}
+        </div>
+        <div
+          className={`${mono ? "font-mono text-[12.5px]" : ""} ${warn ? "text-warning-800" : "text-ink-800"} truncate`}
         >
           {value}
         </div>
@@ -1251,11 +2044,13 @@ function Stat({
   value,
   sub,
   accent,
+  override,
 }: {
   label: string;
   value: string;
   sub: string;
   accent: "neutral" | "warning" | "danger" | "success";
+  override?: boolean;
 }) {
   const accentClass: Record<typeof accent, string> = {
     neutral: "bg-ink-50 text-ink-800",
@@ -1264,8 +2059,18 @@ function Stat({
     success: "bg-success-50 text-success-700",
   } as const;
   return (
-    <div className="rounded-lg border border-ink-200 p-3 bg-white">
-      <div className="h-eyebrow">{label}</div>
+    <div className="rounded-lg border border-ink-200 p-3 bg-white relative">
+      <div className="h-eyebrow flex items-center gap-1">
+        {label}
+        {override && (
+          <span
+            title="Manually overridden"
+            className="text-[9px] uppercase tracking-wider font-bold text-warning-600 bg-warning-50 px-1 rounded"
+          >
+            ovr
+          </span>
+        )}
+      </div>
       <div
         className={`mt-1 inline-flex items-baseline gap-1 px-1.5 rounded ${accentClass[accent]}`}
       >
